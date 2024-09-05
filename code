@@ -1,0 +1,134 @@
+#include <LiquidCrystal_I2C.h>
+#include <WiFi.h>
+#include <FirebaseESP32.h>
+#include "DHT.h"
+ 
+// DHT11 sensor configuration
+#define DHTPIN 4      // Pin where the DHT11 is connected
+#define DHTTYPE DHT11 // DHT11 sensor type
+ 
+DHT dht(DHTPIN, DHTTYPE);
+float temperature = 0;
+float humidity = 0;
+ 
+// Set the LCD number of columns and rows
+int lcdColumns = 16;
+int lcdRows = 2;
+ 
+// Insert your network credentials
+#define WIFI_SSID "raspberry12"
+#define WIFI_PASSWORD "123456789"
+#include "addons/TokenHelper.h"
+#include "addons/RTDBHelper.h"
+ 
+// Define the API Key
+#define API_KEY "AIzaSyCf8Tv64RorH-h83T7CzswM-hsaEiPXFMs"
+ 
+// Define the RTDB URL
+#define DATABASE_URL "https://fir-a9a0f-default-rtdb.asia-southeast1.firebasedatabase.app/"
+ 
+// Define the user Email and password
+#define USER_EMAIL "rohitsai.palstti@gmail.com"
+#define USER_PASSWORD "123456789"
+ 
+// Define Firebase Data object
+FirebaseData fbdo;
+ 
+FirebaseAuth auth;
+FirebaseConfig config;
+ 
+unsigned long sendDataPrevMillis = 0;
+ 
+// Set LCD address, number of columns, and rows
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);  
+ 
+void setup(){
+  // Initialize LCD
+  lcd.begin();
+  // Turn on LCD backlight
+  lcd.backlight();
+  Serial.begin(9600);
+  lcd.setCursor(0, 0);
+  lcd.print("Acqua culture");
+  lcd.setCursor(0, 1);
+  lcd.print("IoT Device");
+  delay(1000);
+ 
+  dht.begin();
+ 
+  // Connect to Wi-Fi
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+  Serial.print("Connecting to Wi-Fi");
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    Serial.print(".");
+    delay(300);
+  }
+  Serial.println();
+  Serial.print("Connected with IP: ");
+  Serial.println(WiFi.localIP());
+  Serial.println();
+ 
+  Serial.printf("Firebase Client v%s\n\n", FIREBASE_CLIENT_VERSION);
+ 
+  // Assign the API key and user credentials
+  config.api_key = API_KEY;
+  auth.user.email = USER_EMAIL;
+  auth.user.password = USER_PASSWORD;
+ 
+  // Assign the RTDB URL
+  config.database_url = DATABASE_URL;
+ 
+  // Assign the callback function for token generation task
+  config.token_status_callback = tokenStatusCallback;
+ 
+  Firebase.begin(&config, &auth);
+}
+ 
+void loop(){
+  // Clear the LCD
+  lcd.clear();
+ 
+  // Read temperature and humidity from DHT11
+  temperature = dht.readTemperature();
+  humidity = dht.readHumidity();
+ 
+  // Display temperature on LCD
+  lcd.setCursor(0, 0);
+  lcd.print("Temp: ");
+  lcd.setCursor(6, 0);
+  lcd.print(temperature);
+  lcd.print(" C");
+ 
+  // Display humidity on LCD
+  lcd.setCursor(0, 1);
+  lcd.print("Humidity: ");
+  lcd.setCursor(10, 1);
+  lcd.print(humidity);
+  lcd.print(" %");
+ 
+  Serial.print("Temperature: ");
+  Serial.print(temperature);
+  Serial.print(" °C, Humidity: ");
+  Serial.print(humidity);
+  Serial.println(" %");
+ 
+  // Send data to Firebase every 15 seconds
+  if (Firebase.ready() && (millis() - sendDataPrevMillis > 1500 || sendDataPrevMillis == 0))
+  {
+    sendDataPrevMillis = millis();
+ 
+    FirebaseJson json;
+    json.add("temperature", temperature);
+    json.add("humidity", humidity);
+ 
+    // Use setJSON to update the data in the specified path
+    if(Firebase.setJSON(fbdo, "/dht11/Data", json)) {
+      Serial.println("Data updated successfully.");
+    } else {
+      Serial.println(fbdo.errorReason());
+    }
+  }
+ 
+  delay(1000);
+}
